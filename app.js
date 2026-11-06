@@ -68,7 +68,7 @@ function sampleNote(){return state.orders.some(o=>o.is_sample)?`<div class="samp
 function stat(label,value,note,ico,color=''){const filter={box:'open',wallet:'payment',clock:'overdue',truck:'shipped'}[ico]||'all';return `<a class="stat stat-link" href="#orders?filter=${filter}" aria-label="مشاهدهٔ ${label}"><div class="stat-top"><span>${label}</span><span class="stat-icon ${color}">${icon(ico)}</span></div><div class="stat-value">${fa(value)}</div><div class="stat-note ${color==='red'?'red':''}">${note}</div></a>`;}
 function empty(title='فعلاً سفارشی اینجا نیست',description='با ثبت یک سفارش، وضعیت و کار بعدی آن را همین‌جا ببینید.',action=true){return `<div class="empty"><div class="empty-icon">${icon('inbox')}</div><h3>${title}</h3><p>${description}</p>${action?`<button class="button small" data-action="new">${icon('plus')}ثبت سفارش جدید</button>`:''}</div>`;}
 function table(orders){return `<div class="order-head"><span>مشتری و سفارش</span><span>محصول</span><span>وضعیت</span><span>موعد ارسال</span><span></span></div><div id="order-rows">${rows(orders)}</div>`;}
-function rows(orders){return orders.length?orders.map(o=>`<div class="order-row" role="link" tabindex="0" data-order="${o.id}" aria-label="مشاهدهٔ سفارش ${esc(o.customer_name)}"><div class="order-person"><span class="avatar">${esc(o.customer_name[0])}</span><div><strong>${esc(o.customer_name)}</strong><small>سفارش #${fa(o.number)}${o.is_sample?'<span class="sample-pill">نمونه</span>':''}</small></div></div><div class="order-item">${esc(o.items[0]?.productName||'کالا')}<small>${fa(o.items.reduce((sum,i)=>sum+i.quantity,0))} عدد${o.items.length>1?` · ${fa(o.items.length)} قلم`:''}</small></div><div class="order-status">${badge(o)}</div><div class="order-due due ${o.action.urgency==='overdue'?'late':''}">${dueLabel(o)}</div><span class="row-arrow">${icon('arrow')}</span></div>`).join(''):empty('همه‌چیز در این بخش ردیف است','سفارشی با این شرایط پیدا نشد.',false);}
+function rows(orders){return orders.length?orders.map(o=>`<div class="order-row" role="link" tabindex="0" data-order="${o.id}" aria-label="مشاهدهٔ سفارش ${esc(o.customer_name)}"><div class="order-person"><input type="checkbox" class="row-pick" data-pick="${o.id}" aria-label="انتخاب سفارش ${esc(o.customer_name)}"><span class="avatar">${esc(o.customer_name[0])}</span><div><strong>${esc(o.customer_name)}</strong><small>سفارش #${fa(o.number)}${o.is_sample?'<span class="sample-pill">نمونه</span>':''}</small></div></div><div class="order-item">${esc(o.items[0]?.productName||'کالا')}<small>${fa(o.items.reduce((sum,i)=>sum+i.quantity,0))} عدد${o.items.length>1?` · ${fa(o.items.length)} قلم`:''}</small></div><div class="order-status">${badge(o)}</div><div class="order-due due ${o.action.urgency==='overdue'?'late':''}">${dueLabel(o)}</div><span class="row-arrow">${icon('arrow')}</span></div>`).join(''):empty('همه‌چیز در این بخش ردیف است','سفارشی با این شرایط پیدا نشد.',false);}
 function sorted(orders){const score={overdue:0,today:1,attention:2,normal:3,none:4};return [...orders].sort((a,b)=>(score[a.action.urgency]-score[b.action.urgency])||String(a.due_date||'9999').localeCompare(b.due_date||'9999')||Number(b.number)-Number(a.number));}
 function todayOrders(){let list=state.orders.filter(actionable);if(state.tab==='overdue')list=list.filter(o=>o.action.urgency==='overdue');if(state.tab==='payment')list=list.filter(o=>o.payment_status!=='confirmed');if(state.tab==='info')list=list.filter(o=>o.status==='needs_info');return sorted(list);}
 function renderToday(){
@@ -104,7 +104,19 @@ async function enhanceToday(){
    const rows=rem.reminders.slice(0,6).map(o=>`<button class="subtle-button" data-order="${o.id}"><strong>${esc(o.customer_name)}</strong> · سفارش #${fa(o.number)} — ${esc(o.label)}</button>`).join('');
    html+=`<section class="panel reminders-panel"><div class="panel-header"><h2>یادآور</h2><p>${fa(rem.reminders.length)} سفارش نیاز به بررسی</p></div><div class="drawer-body reminders-list">${rows}</div></section>`;
   }
+  html+=`<section class="panel ask-panel"><div class="panel-header"><h2>بپرس</h2><p>دربارهٔ سفارش‌های خودت</p></div><div class="drawer-body"><form id="ask-form" class="ask-form"><input id="ask-question" maxlength="500" placeholder="مثلاً چند سفارش آمادهٔ ارسال دارم؟" aria-label="پرسش"><button class="button small" type="submit">بپرس</button></form><div id="ask-answer" class="notice" hidden></div></div></section>`;
   if(html)heading.insertAdjacentHTML('afterend',html);
+  const askForm=$('#ask-form');
+  if(askForm)askForm.addEventListener('submit',async event=>{
+   event.preventDefault();
+   const input=$('#ask-question'),box=$('#ask-answer'),button=askForm.querySelector('button');
+   const question=input.value.trim();
+   if(!question)return;
+   button.disabled=true;box.hidden=false;box.textContent='در حال بررسی…';
+   try{const result=await send('/api/ask',{question});box.textContent=result.answer||'پاسخی پیدا نشد.';}
+   catch(error){box.textContent=error.message;}
+   finally{button.disabled=false;}
+  });
  }catch{}
 }
 async function enhanceCustomers(){
@@ -126,6 +138,32 @@ function prefillReorder(draft){
  if(html)$('#item-rows').innerHTML=html;
  updateTotal();
  toast('اقلام سفارش قبلی با قیمت روز وارد شد؛ بررسی و ثبت کن.');
+}
+state.picked=new Set();
+function bulkBar(){
+ let bar=document.querySelector('#bulk-bar');
+ if(!bar){
+  bar=document.createElement('div');
+  bar.id='bulk-bar';bar.className='bulk-bar';bar.hidden=true;
+  bar.innerHTML=`<span id="bulk-count"></span><select id="bulk-status">${Object.entries(names).map(([key,label])=>`<option value="${key}">${esc(label)}</option>`).join('')}</select><button class="button small" id="bulk-apply">اعمال</button><button class="text-button" id="bulk-clear">لغو انتخاب</button>`;
+  document.body.append(bar);
+  bar.querySelector('#bulk-apply').addEventListener('click',applyBulk);
+  bar.querySelector('#bulk-clear').addEventListener('click',()=>{state.picked.clear();$$('.row-pick').forEach(c=>{c.checked=false;});bulkBar();});
+ }
+ bar.hidden=state.picked.size===0;
+ if(state.picked.size)bar.querySelector('#bulk-count').textContent=`${fa(state.picked.size)} سفارش انتخاب شده`;
+ return bar;
+}
+async function applyBulk(){
+ const status=document.querySelector('#bulk-status').value;
+ const items=[...state.picked].map(id=>{const order=state.orders.find(o=>o.id===id);return {id,version:order?.version};}).filter(i=>Number.isInteger(i.version));
+ if(!items.length)return;
+ try{
+  const result=await send('/api/orders/bulk',{operation:'status',status,items});
+  toast(`${fa(result.done)} سفارش تغییر کرد${result.failed?`، ${fa(result.failed)} ناموفق`:''}.`);
+  state.picked.clear();
+  await refresh();render();
+ }catch(error){toast(error.message);}
 }
 function itemRow(item={}){const key=crypto.randomUUID();return `<div class="item-row"><div class="field"><label for="product-${key}">محصول</label><input id="product-${key}" name="productName" list="catalog" required maxlength="200" placeholder="نام محصول" value="${esc(item.productName||'')}"></div><div class="field"><label for="quantity-${key}">تعداد</label><input id="quantity-${key}" name="quantity" inputmode="numeric" required aria-label="تعداد کالا" value="${esc(item.quantity??1)}"></div><div class="field"><label for="price-${key}">قیمت واحد · تومان</label><input id="price-${key}" name="unitPrice" inputmode="numeric" required aria-label="قیمت واحد به تومان" value="${esc(item.unitPrice??'')}"></div><button class="icon-button" type="button" data-action="remove-item" aria-label="حذف قلم">${icon('x')}</button></div>`;}
 function openEditor(){
@@ -207,6 +245,7 @@ async function route(){
 }
 document.addEventListener('click',async event=>{
  const close=event.target.closest('[data-close]');if(close){$('#'+close.dataset.close).close();return;}
+ if(event.target.closest('[data-pick]'))return;
  const orderLink=event.target.closest('[data-order]');if(orderLink){const id=orderLink.dataset.order;if(location.hash===`#orders/${id}`)await openOrder(id);else location.hash=`orders/${id}`;return;}
  const customerLink=event.target.closest('[data-customer]');if(customerLink){location.hash=`customers/${customerLink.dataset.customer}`;return;}
  const tab=event.target.closest('[data-tab]');if(tab){state.tab=tab.dataset.tab;render();return;}
@@ -236,6 +275,7 @@ document.addEventListener('input',event=>{
  if(event.target.id==='customer-phone')historyHint();
 });
 document.addEventListener('change',event=>{
+ if(event.target.classList?.contains('row-pick')){const id=event.target.dataset.pick;if(event.target.checked)state.picked.add(id);else state.picked.delete(id);bulkBar();return;}
  if(event.target.id==='order-filter'){state.filter=event.target.value;$('#order-rows').innerHTML=rows(filteredOrders());}
  if(event.target.id==='payment-reviewed')$('[data-action=confirm-payment]').disabled=!event.target.checked;
  if(event.target.name==='productName'){

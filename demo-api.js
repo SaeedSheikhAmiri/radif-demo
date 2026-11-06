@@ -79,8 +79,9 @@ export async function demoApi(url,options={}){
   }else throw new Error('عملیات دمو پشتیبانی نمی‌شود.');
   Object.assign(original,order);persist();return view(original);
  }
- if(url==='/api/intake/status')return {ocr:{available:false,message:'خواندن عکس در دموی عمومی انجام نمی‌شود؛ متن را دستی وارد کنید.'},instagram:{configured:false,message:'اتصال اینستاگرام در دموی عمومی شبیه‌سازی است و پیام واقعی دریافت نمی‌کند.',needs:['این دمو فقط برای بررسی رابط است']}};
+ if(url==='/api/intake/status')return {ocr:{available:false,message:'خواندن عکس در دموی عمومی انجام نمی‌شود؛ متن را دستی وارد کنید.'},voice:{available:false,message:'تبدیل صدا در دموی عمومی نیست.'},instagram:{configured:false,message:'اتصال اینستاگرام در دموی عمومی شبیه‌سازی است و پیام واقعی دریافت نمی‌کند.',needs:['این دمو فقط برای بررسی رابط است']}};
  if(url==='/api/intake/image')throw new Error('خواندن عکس در دموی عمومی انجام نمی‌شود؛ متن گفتگو را دستی وارد کنید.');
+ if(url==='/api/intake/voice')throw new Error('تبدیل صدا در دموی عمومی انجام نمی‌شود؛ متن گفتگو را دستی وارد کنید.');
  if(url==='/api/inbox'&&method==='GET')return {messages:[...data.inbox].sort((a,b)=>(a.priority==='urgent'?0:a.priority==='attention'?1:2)-(b.priority==='urgent'?0:b.priority==='attention'?1:2)),labels:demoLabels};
  if(url==='/api/inbox'&&method==='POST'){
   const body=String(input.text||'').trim();if(!body||body.length>12000)throw new Error('متن پیام باید بین ۱ تا ۱۲ هزار نویسه باشد.');
