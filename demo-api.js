@@ -26,7 +26,7 @@ function seedInbox(){
  const stamp=new Date().toISOString();
  return [
   {id:id(),source:'instagram',external_id:'demo-message-1',sender_id:'demo-sender',body:'سلام، پول رو واریز کردم؛ لطفاً سفارشم رو پیگیری کنید و کد رهگیری بدید.',labels:['payment','tracking'],priority:'urgent',evidence:['سلام، پول رو واریز کردم؛ لطفاً سفارشم رو پیگیری کنید و کد رهگیری بدید.'],suggested_action:'بررسی واریز و تأیید دستی',triage_status:'completed',triage_engine:'rules',triage_error:null,reviewed:false,order_id:null,version:1,created_at:stamp,updated_at:stamp},
-  {id:id(),source:'manual',external_id:null,sender_id:null,body:'همون صابون زغال قبلی رو دوباره می‌خوام، دو تا.',labels:['repeat','order'],priority:'normal',evidence:['همون صابون زغال قبلی رو دوباره می‌خوام، دو تا.'],suggested_action:'بررسی خرید قبلی همین مشتری',triage_status:'completed',triage_engine:'rules',triage_error:null,reviewed:false,order_id:null,version:1,created_at:stamp,updated_at:stamp},
+  {id:id(),source:'manual',external_id:null,sender_id:null,body:'همون صابون زغال قبلی رو دوباره می‌خوام. لطفاً کد رهگیری هم بدید.',labels:['repeat','order','tracking'],priority:'normal',evidence:['همون صابون زغال قبلی رو دوباره می‌خوام. لطفاً کد رهگیری هم بدید.'],suggested_action:'بررسی خرید قبلی همین مشتری',triage_status:'completed',triage_engine:'rules',triage_error:null,reviewed:false,order_id:null,version:1,created_at:stamp,updated_at:stamp},
  ];
 }
 let data;try{data=JSON.parse(sessionStorage.getItem(key));}catch{}if(!data?.orders)data=seed();if(!Array.isArray(data.inbox))data.inbox=seedInbox();
