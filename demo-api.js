@@ -11,7 +11,25 @@ function seed(){
  const orders=states.map((status,i)=>{const c=customers[i===5?1:i===6?5:i],p=products[i%4],stamp=new Date().toISOString();return {id:id(),number:1001+i,customer_id:c.id,customer_name:c.name,phone:c.phone,handle:null,address:status==='needs_info'?null:c.address,due_date:day([0,0,-1,1,-2,-12,2][i]),status,payment_status:i===0?'receipt_reported':status==='needs_info'?'unconfirmed':'confirmed',payment_confirmed_at:null,tracking_code:['shipped','delivered'].includes(status)?'DEMO-123456':null,version:1,is_sample:true,request_key:id(),source_text:'اطلاعات کاملاً ساختگی برای دموی عمومی',notes:'',created_at:stamp,updated_at:stamp,items:[{id:id(),productName:p.name,quantity:2,unitPrice:p.price}],events:[{type:'sample_created',description:'سفارش ساختگی دمو',created_at:stamp}]};});
  return {products,customers,orders};
 }
-let data;try{data=JSON.parse(sessionStorage.getItem(key));}catch{}if(!data?.orders)data=seed();
+const demoLabels={order:'درخواست سفارش',payment:'اعلام پرداخت',tracking:'پیگیری و رهگیری',repeat:'خرید مجدد',complaint:'تأخیر یا نارضایتی',question:'پرسش دربارهٔ محصول',other:'نیازمند بررسی'};
+// Same idea as the private rules triage, duplicated here because the real
+// module imports the database-backed agent and cannot run in a static demo.
+function demoTriage(body){
+ const rules={order:/سفارش (?:بدم|بدهم|ثبت|جدید)|خرید (?:کنم|دارم)|عدد|تا /,payment:/واریز|فیش|پول|پرداخت/,tracking:/رهگیری|بسته|کی می.?رس|نرسیده|ارسال/,repeat:/قبلی|دوباره|همیشگی|همون|خرید مجدد/,complaint:/نرسیده|ناراضی|شکایت|تأخیر|جواب نمی|گم شده/,question:/قیمت|موجود|چنده/};
+ const labels=Object.keys(rules).filter(name=>rules[name].test(body));
+ if(!labels.length)labels.push('other');
+ const priority=labels.includes('complaint')?'urgent':labels.includes('payment')||labels.includes('tracking')?'attention':'normal';
+ const actions={order:'ثبت سفارش از همین متن',payment:'بررسی واریز و تأیید دستی',tracking:'بررسی وضعیت ارسال و کد رهگیری',repeat:'بررسی خرید قبلی همین مشتری',complaint:'پاسخ فوری و پیگیری',question:'پاسخ به پرسش محصول',other:'بررسی پیام'};
+ return {labels,priority,evidence:[body.slice(0,160)],suggested_action:actions[labels[0]]||'بررسی پیام',engine:'rules'};
+}
+function seedInbox(){
+ const stamp=new Date().toISOString();
+ return [
+  {id:id(),source:'instagram',external_id:'demo-message-1',sender_id:'demo-sender',body:'سلام، پول رو واریز کردم؛ لطفاً سفارشم رو پیگیری کنید و کد رهگیری بدید.',labels:['payment','tracking'],priority:'urgent',evidence:['سلام، پول رو واریز کردم؛ لطفاً سفارشم رو پیگیری کنید و کد رهگیری بدید.'],suggested_action:'بررسی واریز و تأیید دستی',triage_status:'completed',triage_engine:'rules',triage_error:null,reviewed:false,order_id:null,version:1,created_at:stamp,updated_at:stamp},
+  {id:id(),source:'manual',external_id:null,sender_id:null,body:'همون صابون زغال قبلی رو دوباره می‌خوام، دو تا.',labels:['repeat','order'],priority:'normal',evidence:['همون صابون زغال قبلی رو دوباره می‌خوام، دو تا.'],suggested_action:'بررسی خرید قبلی همین مشتری',triage_status:'completed',triage_engine:'rules',triage_error:null,reviewed:false,order_id:null,version:1,created_at:stamp,updated_at:stamp},
+ ];
+}
+let data;try{data=JSON.parse(sessionStorage.getItem(key));}catch{}if(!data?.orders)data=seed();if(!Array.isArray(data.inbox))data.inbox=seedInbox();
 const runs=new Map();
 const persist=()=>{try{sessionStorage.setItem(key,JSON.stringify(data));}catch{}};
 function view(order){return {...order,total:String(order.items.reduce((s,i)=>s+i.quantity*i.unitPrice,0)),action:nextAction(order,today())};}
@@ -57,6 +75,24 @@ export async function demoApi(url,options={}){
    const v=validateOrder({customerName:order.customer_name,phone:input.phone,address:input.address,dueDate:input.dueDate,notes:input.notes,items,requestKey:order.request_key});order.phone=v.phone;order.address=v.address;order.due_date=v.dueDate;order.notes=v.notes;order.items=v.items.map((i,n)=>({...i,id:items[n].id}));if(order.status==='needs_info'&&!v.missing.length)order.status='awaiting_payment';event(order,'ویرایش اطلاعات نمونه');
   }else throw new Error('عملیات دمو پشتیبانی نمی‌شود.');
   Object.assign(original,order);persist();return view(original);
+ }
+ if(url==='/api/intake/status')return {ocr:{available:false,message:'خواندن عکس در دموی عمومی انجام نمی‌شود؛ متن را دستی وارد کنید.'},instagram:{configured:false,message:'اتصال اینستاگرام در دموی عمومی شبیه‌سازی است و پیام واقعی دریافت نمی‌کند.',needs:['این دمو فقط برای بررسی رابط است']}};
+ if(url==='/api/intake/image')throw new Error('خواندن عکس در دموی عمومی انجام نمی‌شود؛ متن گفتگو را دستی وارد کنید.');
+ if(url==='/api/inbox'&&method==='GET')return {messages:[...data.inbox].sort((a,b)=>(a.priority==='urgent'?0:a.priority==='attention'?1:2)-(b.priority==='urgent'?0:b.priority==='attention'?1:2)),labels:demoLabels};
+ if(url==='/api/inbox'&&method==='POST'){
+  const body=String(input.text||'').trim();if(!body||body.length>12000)throw new Error('متن پیام باید بین ۱ تا ۱۲ هزار نویسه باشد.');
+  const triage=demoTriage(body),row={id:id(),source:input.source==='image'?'image':'manual',external_id:null,sender_id:null,body,labels:triage.labels,priority:triage.priority,evidence:triage.evidence,suggested_action:triage.suggested_action,triage_status:'completed',triage_engine:'rules',triage_error:null,reviewed:false,order_id:null,version:1,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+  data.inbox.unshift(row);persist();return row;
+ }
+ if(parts[1]==='inbox'){
+  const row=data.inbox.find(m=>m.id===recordId);if(!row)throw new Error('پیام دمو پیدا نشد.');
+  if(input.version!==row.version)throw new Error('پیام به‌روز شده است؛ فهرست را تازه کنید.');
+  if(input.operation==='review'){
+   const body=String(input.text||'').trim();if(!body)throw new Error('متن قابل بررسی نیست.');
+   const triage=demoTriage(body);Object.assign(row,{body,reviewed:true,labels:triage.labels,priority:triage.priority,evidence:triage.evidence,suggested_action:triage.suggested_action,version:row.version+1,updated_at:new Date().toISOString()});persist();return structuredClone(row);
+  }
+  if(input.operation==='retry'){row.triage_status='completed';row.triage_error=null;row.version++;row.updated_at=new Date().toISOString();persist();return structuredClone(row);}
+  throw new Error('عملیات پیام معتبر نیست.');
  }
  throw new Error('این بخش در دموی نمایشی موجود نیست.');
 }
