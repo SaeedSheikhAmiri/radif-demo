@@ -2,6 +2,7 @@ import {demoApi} from './demo-api.js';
 import {setupAgentUI} from './agent-ui.js';
 import {imageInputMarkup,bindImageInput} from './image-input.js';
 import {mountInbox} from './inbox-ui.js';
+import {mountSettings} from './settings-ui.js';
 const $=(q,root=document)=>root.querySelector(q);
 const $$=(q,root=document)=>[...root.querySelectorAll(q)];
 const esc=value=>String(value??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
@@ -34,10 +35,12 @@ const paths={
  edit:'<path d="m16 3 5 5-12 12-6 1 1-6L16 3Zm-3 3 5 5"/>',
  refresh:'<path d="M20 7a9 9 0 1 0 1 9M20 2v6h-6"/>',
  inbox:'<path d="m3 3-2 12v6h22v-6L21 3H3Zm-2 12h6l2 3h6l2-3h6"/>',
+ settings:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
 };
 const icon=name=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.box}</svg>`;
 function icons(root=document){$$('[data-icon]',root).forEach(el=>el.innerHTML=icon(el.dataset.icon));}
 const state={orders:[],products:[],customers:[],today:'',view:'today',tab:'all',query:'',filter:'all',detail:null,draftKey:null,installPrompt:null};
+state.settings={};
 let toastTimer;
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),4000);}
 const api=demoApi;
@@ -53,6 +56,9 @@ function dueLabel(order){if(order.due_date===state.today)return 'امروز';if(
 const badge=o=>`<span class="badge ${esc(o.status)}">${names[o.status]}</span>`;
 async function refresh(){
  const [data,products,customers]=await Promise.all([api('/api/orders'),api('/api/products'),api('/api/customers')]);
+ // Loaded here, not at module scope: the public demo replaces api with a const,
+ // which would be in the temporal dead zone at import time.
+ try{state.settings=(await api('/api/settings')).settings||{};}catch{state.settings={};}
  state.orders=data.orders;state.today=data.today;state.products=products.products;state.customers=customers.customers;
  $('#connection').innerHTML='<i></i>دموی نمایشی · دادهٔ مرورگر';$('#connection').classList.remove('failed');
  $('#nav-count').textContent=fa(state.orders.filter(actionable).length);
@@ -78,11 +84,48 @@ function renderOrders(){return `${heading('سفارش‌ها','از اولین �
 function renderCustomers(){return `${heading('مشتری‌ها','سابقه‌ای که کمک می‌کند هر بار از اول شروع نکنید.')}<p class="page-summary">${fa(state.customers.length)} مشتری ثبت‌شده · اتصال سفارش‌های یک مشتری بر اساس شمارهٔ موبایل یکسان انجام می‌شود.</p><div class="customer-grid">${state.customers.map(c=>`<button class="customer-card" data-customer="${c.id}"><div class="order-person"><span class="avatar">${esc(c.name[0])}</span><div><strong>${esc(c.name)}</strong><small class="ltr">${esc(c.phone||'بدون شماره')}</small></div></div><div class="customer-facts"><span><b>${fa(c.order_count)}</b>سفارش ثبت‌شده</span><span><b>${fa(c.delivered_count)}</b>تحویل‌شده</span><span><b>${fa(c.confirmed_order_value)}</b>ارزش سفارش‌های تأییدپرداخت‌شده · تومان</span></div></button>`).join('')||empty('هنوز مشتری‌ای ثبت نشده','با ثبت اولین سفارش، سابقهٔ مشتری هم ساخته می‌شود.')}</div>`;}
 function renderProducts(){return `${heading('محصول‌ها','نام و قیمت‌های پیشنهادی برای ساخت سریع‌تر کارت سفارش.',false)}<div class="notice" style="margin-bottom:20px">تغییر قیمت محصول روی سفارش‌های قبلاً ثبت‌شده اثر ندارد. قیمت همهٔ سفارش‌ها به تومان است.</div><div class="product-grid">${state.products.map(p=>`<article class="product-card"><div class="product-art">${icon('leaf')}</div><h3>${esc(p.name)}</h3><div class="price">${amount(p.price)}</div><button class="button secondary small" data-edit-product="${p.id}">${icon('edit')}ویرایش قیمت</button></article>`).join('')}</div><section class="panel" style="margin-top:22px"><div class="panel-header"><h2>افزودن یا به‌روزرسانی محصول</h2></div><form id="product-form" class="product-form"><div class="field"><label for="product-name">نام محصول</label><input id="product-name" name="name" required maxlength="200" placeholder="مثلاً صابون جو دوسر"></div><div class="field"><label for="product-price">قیمت هر عدد · تومان</label><input id="product-price" name="price" required inputmode="numeric" placeholder="۱۲۰٬۰۰۰"></div><button class="button" type="submit">${icon('plus')}ذخیرهٔ محصول</button><div id="product-error" class="form-error" role="alert" style="width:100%"></div></form></section>`;}
 function render(){
- const titles={today:'کارهای امروز',orders:'همهٔ سفارش‌ها',customers:'مشتری‌ها',products:'محصول‌ها',inbox:'صندوق پیام‌ها'};
+ const titles={today:'کارهای امروز',orders:'همهٔ سفارش‌ها',customers:'مشتری‌ها',products:'محصول‌ها',inbox:'صندوق پیام‌ها',settings:'تنظیمات'};
  $('#breadcrumb').textContent=titles[state.view];
  $$('[data-nav]').forEach(el=>{el.classList.toggle('active',el.dataset.nav===state.view);if(el.dataset.nav===state.view)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
- if(state.view==='inbox'){mountInbox({api,send,esc,icon,isCurrent:()=>state.view==='inbox',onDraft:row=>{openEditor();$('#source-text').value=row.body;const form=$('#order-form');form.dataset.inboxMessageId=row.id;form.dataset.inboxVersion=row.version;form.dataset.inboxSource=row.body;toast('متن پیام در کارت قرار گرفت؛ پیشنهاد دستیار یا استخراج را اجرا و کارت را بررسی کنید.');}});return;}
+ if(state.view==='inbox'){mountInbox({api,send,esc,icon,isCurrent:()=>state.view==='inbox',onDraft:row=>{openEditor();$('#source-text').value=row.body;const form=$('#order-form');form.dataset.inboxMessageId=row.id;form.dataset.inboxVersion=row.version;form.dataset.inboxSource=row.body;toast('متن پیام در کارت قرار گرفت؛ پیشنهاد دستیار یا استخراج را اجرا و کارت را بررسی کنید.');if(state.settings.autoDraftFromMessage)setTimeout(()=>$('#agent-button')?.click(),350);}});return;}
+ if(state.view==='settings'){mountSettings({api,send,esc,icon});return;}
  $('#main').innerHTML=({today:renderToday,orders:renderOrders,customers:renderCustomers,products:renderProducts}[state.view]||renderToday)();icons($('#main'));
+ if(state.view==='today')void enhanceToday();
+ if(state.view==='customers')void enhanceCustomers();
+}
+async function enhanceToday(){
+ try{
+  const [brief,rem]=await Promise.all([api('/api/briefing'),api('/api/reminders')]);
+  const main=$('#main');if(state.view!=='today'||!main.querySelector('.page-heading'))return;
+  const heading=main.querySelector('.page-heading');
+  let html='';
+  if(brief.enabled)html+=`<div class="notice briefing">${esc(brief.text)}</div>`;
+  if(rem.enabled&&rem.reminders.length){
+   const rows=rem.reminders.slice(0,6).map(o=>`<button class="subtle-button" data-order="${o.id}"><strong>${esc(o.customer_name)}</strong> · سفارش #${fa(o.number)} — ${esc(o.label)}</button>`).join('');
+   html+=`<section class="panel reminders-panel"><div class="panel-header"><h2>یادآور</h2><p>${fa(rem.reminders.length)} سفارش نیاز به بررسی</p></div><div class="drawer-body reminders-list">${rows}</div></section>`;
+  }
+  if(html)heading.insertAdjacentHTML('afterend',html);
+ }catch{}
+}
+async function enhanceCustomers(){
+ try{
+  const {enabled,duplicates}=await api('/api/customers/duplicates');
+  if(!enabled||!duplicates.length||state.view!=='customers')return;
+  const heading=$('#main').querySelector('.page-heading');if(!heading)return;
+  const text=duplicates.slice(0,5).map(d=>`${esc(d.phone)} → ${esc((d.names||[]).join('، '))}`).join(' | ');
+  heading.insertAdjacentHTML('afterend',`<div class="notice">شمارهٔ تکراری: ${text}. پیش از ثبت سفارش تازه، یک مشتری را انتخاب کنید.</div>`);
+ }catch{}
+}
+function prefillReorder(draft){
+ openEditor();
+ $('#customer-name').value=draft.customerName||'';
+ $('#customer-phone').value=draft.phone||'';
+ $('#customer-address').value=draft.address||'';
+ $('#customer-handle').value=draft.handle||'';
+ const html=(draft.items||[]).map(i=>itemRow({productName:i.name,quantity:i.quantity,unitPrice:i.unitPrice})).join('');
+ if(html)$('#item-rows').innerHTML=html;
+ updateTotal();
+ toast('اقلام سفارش قبلی با قیمت روز وارد شد؛ بررسی و ثبت کن.');
 }
 function itemRow(item={}){const key=crypto.randomUUID();return `<div class="item-row"><div class="field"><label for="product-${key}">محصول</label><input id="product-${key}" name="productName" list="catalog" required maxlength="200" placeholder="نام محصول" value="${esc(item.productName||'')}"></div><div class="field"><label for="quantity-${key}">تعداد</label><input id="quantity-${key}" name="quantity" inputmode="numeric" required aria-label="تعداد کالا" value="${esc(item.quantity??1)}"></div><div class="field"><label for="price-${key}">قیمت واحد · تومان</label><input id="price-${key}" name="unitPrice" inputmode="numeric" required aria-label="قیمت واحد به تومان" value="${esc(item.unitPrice??'')}"></div><button class="icon-button" type="button" data-action="remove-item" aria-label="حذف قلم">${icon('x')}</button></div>`;}
 function openEditor(){
@@ -135,7 +178,7 @@ function renderDetail(order){
  if(order.status==='ready_to_ship')controls+=`<div class="field"><label for="tracking-input">کد رهگیری یا شناسهٔ تحویل به پیک</label><input id="tracking-input" dir="ltr" maxlength="120" placeholder="شناسه را بعد از ارسال وارد کنید"></div><button class="button" data-next-status="shipped">${icon('truck')}ثبت ارسال و کد رهگیری</button>`;
  if(order.status==='shipped')controls+=`<button class="button" data-next-status="delivered">${icon('check')}تحویل مشتری شد</button>`;
  const reply=order.tracking_code?`سلام ${order.customer_name} عزیز، سفارش شمارهٔ ${fa(order.number)} ارسال شده است.\nکد رهگیری: ${order.tracking_code}\nممنون از همراهی شما.`:'';
- $('#detail-content').innerHTML=`<div class="modal-header"><div><span class="eyebrow">سفارش #${fa(order.number)} ${order.is_sample?'· نمونه':''}</span><h2>${esc(order.customer_name)}</h2><p class="detail-subtitle">${badge(order)}</p></div><button class="icon-button" data-close="detail" aria-label="بستن جزئیات سفارش">${icon('x')}</button></div><div class="drawer-body"><div class="detail-action"><strong>${esc(order.action.label)}</strong><p>${missing.length?'اطلاعات موردنیاز: '+missing.join('، '):order.action.urgency==='overdue'?'موعد توافق‌شده گذشته است؛ وضعیت سفارش را بررسی کنید.':'اطلاعات را بررسی کنید و مرحلهٔ بعد را ثبت کنید.'}</p></div><dl class="detail-meta"><div><dt>شمارهٔ موبایل</dt><dd class="ltr">${esc(order.phone||'ثبت نشده')}</dd></div><div><dt>موعد ارسال</dt><dd>${dateLabel(order.due_date)}</dd></div><div><dt>وضعیت پرداخت</dt><dd>${payment[order.payment_status]}</dd></div><div><dt>شناسهٔ پیج</dt><dd class="ltr">${esc(order.handle||'ثبت نشده')}</dd></div><div class="full"><dt>نشانی همین سفارش</dt><dd>${esc(order.address||'هنوز ثبت نشده')}</dd></div>${order.notes?`<div class="full"><dt>یادداشت</dt><dd>${esc(order.notes)}</dd></div>`:''}</dl><table class="detail-items"><thead><tr><th>محصول</th><th>تعداد</th><th>مبلغ · تومان</th></tr></thead><tbody>${order.items.map(i=>`<tr><td>${esc(i.productName)}</td><td>${fa(i.quantity)}</td><td>${fa(Number(i.unitPrice)*i.quantity)}</td></tr>`).join('')}</tbody></table><div class="form-total"><span>جمع اقلام سفارش</span><strong>${amount(order.total)}</strong></div><p class="field-hint">هزینهٔ ارسال در این مبلغ لحاظ نشده است.</p><div class="detail-controls">${controls}<div id="detail-error" class="form-error" role="alert"></div></div>${reply?`<section class="detail-section"><h3>پیام آمادهٔ اطلاع‌رسانی</h3><div class="reply-text" id="reply-text">${esc(reply)}</div><button class="button secondary small" data-action="copy-reply">${icon('copy')}کپی پیام برای مشتری</button><p class="field-hint" style="margin-top:8px">این پیام خودکار ارسال نمی‌شود.</p></section>`:''}<section id="edit-section" class="detail-section" hidden><h3>ویرایش اطلاعات همین سفارش</h3><form id="edit-order-form" class="edit-grid"><div class="field"><label for="edit-phone">موبایل</label><input id="edit-phone" name="phone" inputmode="tel" dir="ltr" value="${esc(order.phone||'')}"></div><div class="field"><label for="edit-address">نشانی</label><textarea id="edit-address" name="address" rows="2">${esc(order.address||'')}</textarea></div><div class="field"><label for="edit-date">موعد ارسال</label><input id="edit-date" name="dueDate" type="date" value="${esc(order.due_date||'')}"></div>${order.items.map(i=>`<div class="field"><label>${esc(i.productName)} · قیمت واحد به تومان</label><input data-item-price="${i.id}" inputmode="numeric" value="${esc(i.unitPrice)}"></div>`).join('')}<div class="field"><label for="edit-notes">یادداشت</label><input id="edit-notes" name="notes" value="${esc(order.notes)}"></div><button class="button" type="submit">ذخیرهٔ تغییرات</button><div id="edit-error" class="form-error" role="alert"></div></form></section><section class="detail-section"><h3>تاریخچهٔ سفارش</h3><ul class="timeline">${order.events.map(e=>`<li>${esc(e.description)}<small>${timeLabel(e.created_at)}</small></li>`).join('')}</ul></section><section class="detail-section"><details><summary class="details-summary">متن اصلی ثبت سفارش</summary><div class="source-text">${esc(order.source_text||'این سفارش به‌صورت دستی ثبت شده است.')}</div></details></section><div class="detail-section" style="display:flex;justify-content:space-between">${!['shipped','delivered','cancelled'].includes(order.status)?`<button class="subtle-button" data-action="show-edit">${icon('edit')}ویرایش اطلاعات</button><button class="subtle-button" data-action="cancel-order">لغو سفارش</button>`:''}<button class="subtle-button" data-customer="${order.customer_id}">سابقهٔ مشتری</button></div><div id="cancel-section" class="notice" hidden><p>این سفارش لغو شود؟ اطلاعات و سابقهٔ آن باقی می‌ماند. اگر وجهی دریافت شده، بازگشت وجه را جداگانه پیگیری کنید.</p><button class="button danger small" data-next-status="cancelled" style="margin-top:10px">بله، سفارش لغو شود</button></div></div>`;
+ $('#detail-content').innerHTML=`<div class="modal-header"><div><span class="eyebrow">سفارش #${fa(order.number)} ${order.is_sample?'· نمونه':''}</span><h2>${esc(order.customer_name)}</h2><p class="detail-subtitle">${badge(order)}</p></div><button class="icon-button" data-close="detail" aria-label="بستن جزئیات سفارش">${icon('x')}</button></div><div class="drawer-body"><div class="detail-action"><strong>${esc(order.action.label)}</strong><p>${missing.length?'اطلاعات موردنیاز: '+missing.join('، '):order.action.urgency==='overdue'?'موعد توافق‌شده گذشته است؛ وضعیت سفارش را بررسی کنید.':'اطلاعات را بررسی کنید و مرحلهٔ بعد را ثبت کنید.'}</p></div><dl class="detail-meta"><div><dt>شمارهٔ موبایل</dt><dd class="ltr">${esc(order.phone||'ثبت نشده')}</dd></div><div><dt>موعد ارسال</dt><dd>${dateLabel(order.due_date)}</dd></div><div><dt>وضعیت پرداخت</dt><dd>${payment[order.payment_status]}</dd></div><div><dt>شناسهٔ پیج</dt><dd class="ltr">${esc(order.handle||'ثبت نشده')}</dd></div><div class="full"><dt>نشانی همین سفارش</dt><dd>${esc(order.address||'هنوز ثبت نشده')}</dd></div>${order.notes?`<div class="full"><dt>یادداشت</dt><dd>${esc(order.notes)}</dd></div>`:''}</dl><table class="detail-items"><thead><tr><th>محصول</th><th>تعداد</th><th>مبلغ · تومان</th></tr></thead><tbody>${order.items.map(i=>`<tr><td>${esc(i.productName)}</td><td>${fa(i.quantity)}</td><td>${fa(Number(i.unitPrice)*i.quantity)}</td></tr>`).join('')}</tbody></table><div class="form-total"><span>جمع اقلام سفارش</span><strong>${amount(order.total)}</strong></div><p class="field-hint">هزینهٔ ارسال در این مبلغ لحاظ نشده است.</p><div class="detail-controls">${controls}<div id="detail-error" class="form-error" role="alert"></div></div>${reply?`<section class="detail-section"><h3>پیام آمادهٔ اطلاع‌رسانی</h3><div class="reply-text" id="reply-text">${esc(reply)}</div><button class="button secondary small" data-action="copy-reply">${icon('copy')}کپی پیام برای مشتری</button><p class="field-hint" style="margin-top:8px">این پیام خودکار ارسال نمی‌شود.</p></section>`:''}<section id="edit-section" class="detail-section" hidden><h3>ویرایش اطلاعات همین سفارش</h3><form id="edit-order-form" class="edit-grid"><div class="field"><label for="edit-phone">موبایل</label><input id="edit-phone" name="phone" inputmode="tel" dir="ltr" value="${esc(order.phone||'')}"></div><div class="field"><label for="edit-address">نشانی</label><textarea id="edit-address" name="address" rows="2">${esc(order.address||'')}</textarea></div><div class="field"><label for="edit-date">موعد ارسال</label><input id="edit-date" name="dueDate" type="date" value="${esc(order.due_date||'')}"></div>${order.items.map(i=>`<div class="field"><label>${esc(i.productName)} · قیمت واحد به تومان</label><input data-item-price="${i.id}" inputmode="numeric" value="${esc(i.unitPrice)}"></div>`).join('')}<div class="field"><label for="edit-notes">یادداشت</label><input id="edit-notes" name="notes" value="${esc(order.notes)}"></div><button class="button" type="submit">ذخیرهٔ تغییرات</button><div id="edit-error" class="form-error" role="alert"></div></form></section><section class="detail-section"><h3>تاریخچهٔ سفارش</h3><ul class="timeline">${order.events.map(e=>`<li>${esc(e.description)}<small>${timeLabel(e.created_at)}</small></li>`).join('')}</ul></section><section class="detail-section"><details><summary class="details-summary">متن اصلی ثبت سفارش</summary><div class="source-text">${esc(order.source_text||'این سفارش به‌صورت دستی ثبت شده است.')}</div></details></section><div class="detail-section" style="display:flex;justify-content:space-between"><button class="subtle-button" data-action="reorder" data-reorder="${order.id}">${icon("document")}سفارش مجدد</button>${!['shipped','delivered','cancelled'].includes(order.status)?`<button class="subtle-button" data-action="show-edit">${icon('edit')}ویرایش اطلاعات</button><button class="subtle-button" data-action="cancel-order">لغو سفارش</button>`:''}<button class="subtle-button" data-customer="${order.customer_id}">سابقهٔ مشتری</button></div><div id="cancel-section" class="notice" hidden><p>این سفارش لغو شود؟ اطلاعات و سابقهٔ آن باقی می‌ماند. اگر وجهی دریافت شده، بازگشت وجه را جداگانه پیگیری کنید.</p><button class="button danger small" data-next-status="cancelled" style="margin-top:10px">بله، سفارش لغو شود</button></div></div>`;
 }
 async function openOrder(id){
  const dialog=$('#detail');if(!dialog.open)dialog.showModal();$('#detail-content').innerHTML='<div class="loading"><span class="spinner"></span>دریافت سفارش…</div>';
@@ -159,7 +202,7 @@ async function openCustomer(id){
  }catch(error){$('#detail-content').innerHTML=`<div class="drawer-body"><p class="form-error">${esc(error.message)}</p><button class="button secondary" data-close="detail">بستن</button></div>`;}
 }
 async function route(){
- const [routePath,query='']=location.hash.slice(1).split('?'),[view,id]=routePath.split('/');state.view=['orders','customers','products','inbox'].includes(view)?view:'today';if(state.view==='orders'){const filter=new URLSearchParams(query).get('filter');state.filter=['all','open','payment','overdue',...Object.keys(names)].includes(filter)?filter:'all';state.query='';}render();
+ const [routePath,query='']=location.hash.slice(1).split('?'),[view,id]=routePath.split('/');state.view=['orders','customers','products','inbox','settings'].includes(view)?view:'today';if(state.view==='orders'){const filter=new URLSearchParams(query).get('filter');state.filter=['all','open','payment','overdue',...Object.keys(names)].includes(filter)?filter:'all';state.query='';}render();
  if(id&&/^[\da-f-]{36}$/i.test(id)){if(state.view==='orders')await openOrder(id);else if(state.view==='customers')await openCustomer(id);}else if($('#detail').open)$('#detail').close();
 }
 document.addEventListener('click',async event=>{
@@ -180,6 +223,7 @@ document.addEventListener('click',async event=>{
  if(action==='add-item'){$('#item-rows').insertAdjacentHTML('beforeend',itemRow());$$('#item-rows .item-row').at(-1).querySelector('input').focus();}
  if(action==='remove-item'){if($$('#item-rows .item-row').length>1){event.target.closest('.item-row').remove();updateTotal();}else toast('هر سفارش باید حداقل یک قلم داشته باشد.');}
  if(action==='confirm-payment')await mutateDetail({operation:'confirm_payment'});
+ if(action==='reorder'){try{const draft=await api(`/api/orders/${event.target.closest('[data-reorder]').dataset.reorder}/reorder`);prefillReorder(draft);}catch(error){toast(error.message);}}
  if(action==='show-edit'){$('#edit-section').hidden=false;$('#edit-section').scrollIntoView({behavior:'smooth',block:'start'});}
  if(action==='cancel-order'){$('#cancel-section').hidden=false;$('#cancel-section').scrollIntoView({block:'nearest'});}
  if(action==='copy-reply'){try{await navigator.clipboard.writeText($('#reply-text').textContent);toast('پیام کپی شد؛ می‌توانید برای مشتری بفرستید.');}catch{toast('کپی خودکار ممکن نشد؛ متن پیام را انتخاب و کپی کنید.');}}

@@ -30,6 +30,9 @@ function seedInbox(){
  ];
 }
 let data;try{data=JSON.parse(sessionStorage.getItem(key));}catch{}if(!data?.orders)data=seed();if(!Array.isArray(data.inbox))data.inbox=seedInbox();
+const demoAutomationLabels={autoDraftFromMessage:'اجرای خودکار دستیار وقتی پیام را باز می‌کنی',autoLinkMessage:'اتصال خودکار پیام به تنها سفارش باز همان شماره',suggestReply:'پیشنهاد پاسخ آماده برای پرسش قیمت و پیگیری',autoReorder:'دکمهٔ سفارش مجدد از سابقهٔ مشتری',reminders:'یادآور سفارش‌های عقب‌افتاده',dailyBriefing:'خلاصهٔ روز در صفحهٔ امروز',mergeDuplicates:'هشدار مشتری تکراری با شمارهٔ یکسان'};
+const demoAutomationDefaults={autoDraftFromMessage:true,autoLinkMessage:false,suggestReply:true,autoReorder:true,reminders:true,reminderDays:2,dailyBriefing:true,mergeDuplicates:true,retentionDays:0};
+if(!data.settings)data.settings={...demoAutomationDefaults};
 const runs=new Map();
 const persist=()=>{try{sessionStorage.setItem(key,JSON.stringify(data));}catch{}};
 function view(order){return {...order,total:String(order.items.reduce((s,i)=>s+i.quantity*i.unitPrice,0)),action:nextAction(order,today())};}
@@ -93,6 +96,31 @@ export async function demoApi(url,options={}){
   }
   if(input.operation==='retry'){row.triage_status='completed';row.triage_error=null;row.version++;row.updated_at=new Date().toISOString();persist();return structuredClone(row);}
   throw new Error('عملیات پیام معتبر نیست.');
+ }
+ if(url==='/api/settings'){
+  if(method==='PATCH'){data.settings={...data.settings,...input};persist();}
+  return {settings:{...demoAutomationDefaults,...data.settings},defaults:demoAutomationDefaults,labels:demoAutomationLabels};
+ }
+ if(url==='/api/briefing'){
+  const active=['awaiting_payment','preparing','ready_to_ship'],overdue=data.orders.filter(o=>active.includes(o.status)&&o.due_date&&o.due_date<today()).length;
+  const awaiting=data.orders.filter(o=>o.status==='awaiting_payment').length,ready=data.orders.filter(o=>o.status==='ready_to_ship').length;
+  const inbox=data.inbox.filter(m=>!m.order_id).length,parts=[];
+  if(overdue)parts.push(`${overdue.toLocaleString('fa-IR')} سفارش از موعد گذشته`);
+  if(awaiting)parts.push(`${awaiting.toLocaleString('fa-IR')} سفارش منتظر پرداخت`);
+  if(ready)parts.push(`${ready.toLocaleString('fa-IR')} سفارش آمادهٔ ارسال`);
+  if(inbox)parts.push(`${inbox.toLocaleString('fa-IR')} پیام بی‌سفارش در صندوق`);
+  return {enabled:data.settings.dailyBriefing,overdue,awaiting,ready,inbox,text:parts.length?parts.join('، ')+'.':'همه‌چیز مرتب است؛ کاری پشت سر نمانده.'};
+ }
+ if(url==='/api/reminders'){
+  const active=['awaiting_payment','preparing','ready_to_ship'];
+  const list=data.orders.filter(o=>active.includes(o.status)&&o.due_date&&o.due_date<today()).map(o=>({id:o.id,number:o.number,status:o.status,customer_name:o.customer_name,due_date:o.due_date,label:'موعد ارسال گذشته',reason:'overdue'}));
+  return {enabled:data.settings.reminders,days:data.settings.reminderDays,reminders:data.settings.reminders?list:[]};
+ }
+ if(url==='/api/customers/duplicates')return {enabled:data.settings.mergeDuplicates,duplicates:[]};
+ if(parts[1]==='orders'&&parts[3]==='reorder'){
+  const order=data.orders.find(o=>o.id===parts[2]);if(!order)throw new Error('سفارش پیدا نشد.');
+  return {customerId:order.customer_id,customerName:order.customer_name,phone:order.phone,address:order.address||'',handle:order.handle||'',
+   items:order.items.map(i=>{const product=data.products.find(p=>p.name===i.productName);return {productId:product?.id||null,name:i.productName,quantity:i.quantity,unitPrice:Number(product?.price??i.unitPrice)};})};
  }
  throw new Error('این بخش در دموی نمایشی موجود نیست.');
 }
