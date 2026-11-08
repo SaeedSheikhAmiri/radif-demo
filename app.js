@@ -1,5 +1,6 @@
 import {demoApi} from './demo-api.js';
 import {setupAgentUI} from './agent-ui.js';
+import {startTour,resetTour} from './tour.js';
 import {imageInputMarkup,bindImageInput} from './image-input.js';
 import {mountInbox} from './inbox-ui.js';
 import {mountSettings} from './settings-ui.js';
@@ -258,6 +259,7 @@ document.addEventListener('click',async event=>{
  const action=event.target.closest('[data-action]')?.dataset.action;
  if(action==='new')openEditor();
  if(action==='help')$('#help').showModal();
+ if(action==='tour'){resetTour();startTour({force:true});return;}
  if(action==='example'){$('#source-text').value='نام: سارا احمدی\nدو تا صابون جو دوسر می‌خوام.\nموبایل: ۰۹۱۲۰۰۰۰۰۰۱\nآدرس: تهران، نشانی نمونه برای نمایش\nپول رو فرستادم؛ فردا می‌فرستید؟';$('#source-text').focus();}
  if(action==='add-item'){$('#item-rows').insertAdjacentHTML('beforeend',itemRow());$$('#item-rows .item-row').at(-1).querySelector('input').focus();}
  if(action==='remove-item'){if($$('#item-rows .item-row').length>1){event.target.closest('.item-row').remove();updateTotal();}else toast('هر سفارش باید حداقل یک قلم داشته باشد.');}
@@ -299,3 +301,5 @@ window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();sta
 $('#install-button').addEventListener('click',async()=>{await state.installPrompt?.prompt();state.installPrompt=null;$('#install-button').hidden=true;});
 icons();
 try{await refresh();await route();}catch(error){$('#connection').classList.add('failed');$('#connection').innerHTML='<i></i>ارتباط برقرار نیست';$('#main').innerHTML=`${heading('اتصال به میز کار برقرار نشد','اطلاعات شما حذف نشده؛ سرور و پایگاه داده را بررسی کنید.',false)}<div class="panel empty"><p>${esc(error.message)}</p><button class="button" id="retry">${icon('refresh')}تلاش دوباره</button></div>`;$('#retry').addEventListener('click',()=>location.reload());}
+
+startTour();
